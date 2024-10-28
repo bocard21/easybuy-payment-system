@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: easybuy-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: easybuy_db
+      POSTGRES_USER: easybuy_user
+      POSTGRES_PASSWORD: easybuy_pass
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U easybuy_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - '5050:80'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: easybuy-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmqctl status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  eb-payment-service:
+    build:
+      context: ./eb-payment-service
+    container_name: eb-payment-service
+    restart: always
+    environment:
+      DATABASE_URL: postgres://easybuy_user:easybuy_pass@postgres:5432/easybuy_db
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  eb-notification-service:
+    build:
+      context: ./eb-notification-service
+    container_name: eb-notification-service
+    restart: always
+    environment:
+      DATABASE_URL: postgres://easybuy_user:easybuy_pass@postgres:5432/easybuy_db
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+    ports:
+      - '3001:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
